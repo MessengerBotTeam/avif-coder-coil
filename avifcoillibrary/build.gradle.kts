@@ -11,9 +11,19 @@ task("androidSourcesJar", Jar::class) {
 
 afterEvaluate {
     publishing {
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/MessengerBotTeam/avif-coder-coil")
+                credentials {
+                    username = project.findProperty("gpr.user").toString() ?: System.getenv("USERNAME")
+                    password = project.findProperty("gpr.key").toString() ?: System.getenv("TOKEN")
+                }
+            }
+        }
         publications {
             create<MavenPublication>("mavenJava") {
-                groupId = "com.github.awxkee"
+                groupId = "org.msgbot"
                 artifactId = "avif-coder-coil"
                 version = "1.6.9"
                 from(components.findByName("release"))
@@ -54,6 +64,7 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+
 }
 
 dependencies {
