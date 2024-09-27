@@ -28,17 +28,23 @@
 
 package com.github.awxkee.avifcoil.decoder
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
 import android.os.Build
-import coil.ImageLoader
-import coil.decode.DecodeResult
-import coil.decode.Decoder
-import coil.fetch.SourceResult
-import coil.request.Options
-import coil.size.Scale
-import coil.size.pxOrElse
+import coil3.ImageLoader
+import coil3.annotation.ExperimentalCoilApi
+import coil3.asImage
+import coil3.decode.DecodeResult
+import coil3.decode.Decoder
+import coil3.decode.ImageSource
+import coil3.fetch.SourceFetchResult
+import coil3.request.Options
+import coil3.request.allowRgb565
+import coil3.request.bitmapConfig
+import coil3.size.Scale
+import coil3.size.Size
+import coil3.size.pxOrElse
 import com.radzivon.bartoshyk.avif.coder.HeifCoder
 import com.radzivon.bartoshyk.avif.coder.PreferredColorConfig
 import com.radzivon.bartoshyk.avif.coder.ScaleMode
@@ -46,87 +52,76 @@ import kotlinx.coroutines.runInterruptible
 import okio.ByteString.Companion.encodeUtf8
 
 class HeifDecoder(
-    private val context: Context?,
-    private val source: SourceResult,
+    context: Context?,
+    private val source: ImageSource,
     private val options: Options,
-    private val imageLoader: ImageLoader,
-    private val exceptionLogger: ((Exception) -> Unit)? = null,
+    private val imageLoader: ImageLoader
 ) : Decoder {
 
     private val coder = HeifCoder(context)
 
-    override suspend fun decode(): DecodeResult? = runInterruptible {
-        try {
-            // ColorSpace is preferred to be ignored due to lib is trying to handle all color profile by itself
-            val sourceData = source.source.source().readByteArray()
+    @OptIn(ExperimentalCoilApi::class)
+    @SuppressLint("ObsoleteSdkInt")
+    override suspend fun decode(): DecodeResult = runInterruptible {
+        // ColorSpace is preferred to be ignored due to lib is trying to handle all color profile by itself
+        val sourceData = source.source().readByteArray()
 
-            var mPreferredColorConfig: PreferredColorConfig = when (options.config) {
-                Bitmap.Config.ALPHA_8 -> PreferredColorConfig.RGBA_8888
-                Bitmap.Config.RGB_565 -> if (options.allowRgb565) PreferredColorConfig.RGB_565 else PreferredColorConfig.DEFAULT
-                Bitmap.Config.ARGB_8888 -> PreferredColorConfig.RGBA_8888
-                else -> PreferredColorConfig.DEFAULT
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && options.config == Bitmap.Config.RGBA_F16) {
-                mPreferredColorConfig = PreferredColorConfig.RGBA_F16
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && options.config == Bitmap.Config.HARDWARE) {
-                mPreferredColorConfig = PreferredColorConfig.HARDWARE
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && options.config == Bitmap.Config.RGBA_1010102) {
-                mPreferredColorConfig = PreferredColorConfig.RGBA_1010102
-            }
+        var mPreferredColorConfig: PreferredColorConfig = when (options.bitmapConfig) {
+            Bitmap.Config.ALPHA_8 -> PreferredColorConfig.RGBA_8888
+            Bitmap.Config.RGB_565 -> if (options.allowRgb565) PreferredColorConfig.RGB_565 else PreferredColorConfig.DEFAULT
+            Bitmap.Config.ARGB_8888 -> PreferredColorConfig.RGBA_8888
+            else -> PreferredColorConfig.DEFAULT
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && options.bitmapConfig == Bitmap.Config.RGBA_F16) {
+            mPreferredColorConfig = PreferredColorConfig.RGBA_F16
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && options.bitmapConfig == Bitmap.Config.HARDWARE) {
+            mPreferredColorConfig = PreferredColorConfig.HARDWARE
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && options.bitmapConfig == Bitmap.Config.RGBA_1010102) {
+            mPreferredColorConfig = PreferredColorConfig.RGBA_1010102
+        }
 
-            if (options.size == coil.size.Size.ORIGINAL) {
-                val originalImage =
-                    coder.decode(
-                        sourceData,
-                        preferredColorConfig = mPreferredColorConfig
-                    )
-                return@runInterruptible DecodeResult(
-                    BitmapDrawable(
-                        options.context.resources,
-                        originalImage
-                    ), false
-                )
-            }
-
-            val dstWidth = options.size.width.pxOrElse { 0 }
-            val dstHeight = options.size.height.pxOrElse { 0 }
-            val scaleMode = when (options.scale) {
-                Scale.FILL -> ScaleMode.FILL
-                Scale.FIT -> ScaleMode.FIT
-            }
-
+        if (options.size == Size.ORIGINAL) {
             val originalImage =
-                coder.decodeSampled(
+                coder.decode(
                     sourceData,
-                    dstWidth,
-                    dstHeight,
-                    preferredColorConfig = mPreferredColorConfig,
-                    scaleMode,
+                    preferredColorConfig = mPreferredColorConfig
                 )
             return@runInterruptible DecodeResult(
-                BitmapDrawable(
-                    options.context.resources,
-                    originalImage
-                ), true
+                image = originalImage.asImage(true),
+                isSampled = false
             )
-        } catch (e: Exception) {
-            exceptionLogger?.invoke(e)
-            return@runInterruptible null
         }
+
+        val dstWidth = options.size.width.pxOrElse { 0 }
+        val dstHeight = options.size.height.pxOrElse { 0 }
+        val scaleMode = when (options.scale) {
+            Scale.FILL -> ScaleMode.FILL
+            Scale.FIT -> ScaleMode.FIT
+        }
+
+        val originalImage =
+            coder.decodeSampled(
+                sourceData,
+                dstWidth,
+                dstHeight,
+                preferredColorConfig = mPreferredColorConfig,
+                scaleMode,
+            )
+        return@runInterruptible DecodeResult(
+            image = originalImage.asImage(true),
+            isSampled = true
+        )
     }
 
-    /**
-     * @param context is preferred to be set when displaying an HDR content to apply Vulkan shaders
-     */
     class Factory(private val context: Context? = null) : Decoder.Factory {
         override fun create(
-            result: SourceResult,
+            result: SourceFetchResult,
             options: Options,
             imageLoader: ImageLoader
         ): Decoder? {
             return if (AVAILABLE_BRANDS.any {
                     result.source.source().rangeEquals(4, it)
-                }) HeifDecoder(context, result, options, imageLoader) else null
+                }) HeifDecoder(context, result.source, options, imageLoader) else null
         }
 
         companion object {
