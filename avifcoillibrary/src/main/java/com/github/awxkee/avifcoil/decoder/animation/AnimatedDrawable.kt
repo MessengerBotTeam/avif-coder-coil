@@ -201,8 +201,8 @@ public class AnimatedDrawable(
         if (firstFrameAsPlaceholder) {
             makeDecodingRunner(0).run()
             synchronized(lock) {
-                if (syncedFrames.size > 0) {
-                    val syncedFrame = syncedFrames.first
+                if (syncedFrames.isNotEmpty()) {
+                    val syncedFrame = syncedFrames.first()
                     mCurrentFrameDuration = syncedFrame.frameDuration
                     lastDecodedFrameIndex = syncedFrame.frameIndex
                     currentBitmap = syncedFrame.frame

@@ -51,6 +51,7 @@ import com.radzivon.bartoshyk.avif.coder.PreferredColorConfig
 import com.radzivon.bartoshyk.avif.coder.ScaleMode
 import kotlinx.coroutines.runInterruptible
 import okio.ByteString.Companion.encodeUtf8
+import androidx.core.graphics.drawable.toDrawable
 
 public class AnimatedAvifDecoder(
     private val source: SourceFetchResult,
@@ -140,23 +141,20 @@ public class AnimatedAvifDecoder(
             firstFrameAsPlaceholder = true
         )
     } else {
-        BitmapDrawable(
-            options.context.resources,
-            if (dstWidth == 0 || dstHeight == 0) {
-                getFrame(
-                    frame = 0,
-                    preferredColorConfig = colorConfig
-                )
-            } else {
-                getScaledFrame(
-                    frame = 0,
-                    scaledWidth = dstWidth,
-                    scaledHeight = dstHeight,
-                    scaleMode = scaleMode,
-                    preferredColorConfig = colorConfig
-                )
-            }
-        )
+        if (dstWidth == 0 || dstHeight == 0) {
+            getFrame(
+                frame = 0,
+                preferredColorConfig = colorConfig
+            )
+        } else {
+            getScaledFrame(
+                frame = 0,
+                scaledWidth = dstWidth,
+                scaledHeight = dstHeight,
+                scaleMode = scaleMode,
+                preferredColorConfig = colorConfig
+            )
+        }.toDrawable(options.context.resources)
     }.asImage()
 
     /** Note: If you want to use this decoder in order to convert image into other format, then pass [enableAvifAnimation] with false to [ImageRequest] */
