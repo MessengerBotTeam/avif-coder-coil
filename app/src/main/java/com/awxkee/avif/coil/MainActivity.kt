@@ -4,8 +4,11 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import coil.ImageLoader
-import coil.load
+import androidx.core.net.toUri
+import coil3.imageLoader
+import coil3.load
+import coil3.request.bitmapConfig
+import coil3.util.DebugLogger
 import com.awxkee.avif.coil.databinding.ActivityMainBinding
 import com.github.awxkee.avifcoil.decoder.HeifDecoder
 
@@ -19,13 +22,17 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            binding.imageView.load("https://wh.aimuse.online/preset/federico-beccari.avif",
-                imageLoader = ImageLoader.Builder(this)
+            binding.imageView.load(
+                data = "file:///android_asset/test_alpha.avif".toUri(),
+                imageLoader = imageLoader
+                    .newBuilder()
+                    .logger(DebugLogger())
                     .components {
-                        add(HeifDecoder.Factory(this@MainActivity))
+                        add(HeifDecoder.Factory())
                     }
-                    .bitmapConfig(Bitmap.Config.HARDWARE)
-                    .build())
+                    .bitmapConfig(Bitmap.Config.RGBA_1010102)
+                    .build()
+            )
         }
     }
 }
